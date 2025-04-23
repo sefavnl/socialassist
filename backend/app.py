@@ -17,7 +17,7 @@ app = Flask(__name__)
 CORS(app)
 
 # MongoDB connection
-MONGODB_URI = "mongodb+srv://nozkanca7:sgshcoNN21@cluster0.ipznc.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+MONGODB_URI = os.getenv('MONGODB_URI', "mongodb+srv://nozkanca7:sgshcoNN21@cluster0.ipznc.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
 try:
     print("MongoDB URI:", MONGODB_URI)
     client = MongoClient(MONGODB_URI)
@@ -31,7 +31,7 @@ except Exception as e:
     sys.exit(1)
 
 # JWT Secret Key
-app.config['SECRET_KEY'] = 'your-secret-key-here'
+app.config['SECRET_KEY'] = os.getenv('JWT_SECRET', 'your-secret-key-here')
 
 # User Registration
 @app.route('/api/register', methods=['POST'])
@@ -360,4 +360,5 @@ def delete_goal(goal_id):
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True) 
+    port = int(os.getenv('PORT', 5000))
+    app.run(host='0.0.0.0', port=port) 
