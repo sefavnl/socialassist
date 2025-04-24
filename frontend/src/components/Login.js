@@ -68,7 +68,7 @@ const Login = () => {
                 
                 <div className="auth-links">
                     <a href="/forgot-password">Şifremi Unuttum</a>
-                    <a href="/register">Hesap Oluştur</a>
+                    <a href="/api/register">Hesap Oluştur</a>
                 </div>
             </div>
         </div>

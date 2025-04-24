@@ -15,8 +15,10 @@ from functools import wraps
 load_dotenv()
 
 app = Flask(__name__, static_folder='../frontend/build', static_url_path='')
+
+# CORS ayarlarını güncelle
 CORS(app, resources={
-    r"/*": {
+    r"/api/*": {
         "origins": ["https://socialassist-frontend.onrender.com", "http://localhost:3000"],
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"],
@@ -343,4 +345,4 @@ def delete_goal(current_user, goal_id):
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
-    app.run(host='0.0.0.0', port=port) 
+    app.run(host='0.0.0.0', port=port, debug=True) 
