@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api/axios';
 import { useNavigate } from 'react-router-dom';
 import Chatbot from './Chatbot';
 import './Dashboard.css';
@@ -15,13 +15,10 @@ const Dashboard = () => {
     useEffect(() => {
         const fetchUserData = async () => {
             try {
-                const token = localStorage.getItem('token');
                 const userData = JSON.parse(localStorage.getItem('user'));
                 setUser(userData);
 
-                const response = await axios.get('http://localhost:5000/api/goals', {
-                    headers: { Authorization: token }
-                });
+                const response = await api.get('/api/goals');
                 setGoals(response.data);
                 setLoading(false);
             } catch (err) {
@@ -37,15 +34,7 @@ const Dashboard = () => {
     const handleAddGoal = async (e) => {
         e.preventDefault();
         try {
-            const token = localStorage.getItem('token');
-            if (!token) {
-                setError('Oturum bilgisi bulunamadı');
-                return;
-            }
-
-            const response = await axios.post('http://localhost:5000/api/goals', newGoal, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const response = await api.post('/api/goals', newGoal);
 
             if (response.data.message === 'Goal added successfully') {
                 // Yeni hedefi ekle ve state'i güncelle
@@ -71,16 +60,8 @@ const Dashboard = () => {
         }
 
         try {
-            const token = localStorage.getItem('token');
-            if (!token) {
-                setError('Oturum bilgisi bulunamadı');
-                return;
-            }
-
-            const response = await axios.put(`http://localhost:5000/api/goals/${goalId}`, {
+            const response = await api.put(`/api/goals/${goalId}`, {
                 completed: true
-            }, {
-                headers: { Authorization: `Bearer ${token}` }
             });
             
             if (response.data.message === 'Goal updated successfully') {
@@ -101,15 +82,7 @@ const Dashboard = () => {
         }
 
         try {
-            const token = localStorage.getItem('token');
-            if (!token) {
-                setError('Oturum bilgisi bulunamadı');
-                return;
-            }
-
-            const response = await axios.delete(`http://localhost:5000/api/goals/${goalId}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const response = await api.delete(`/api/goals/${goalId}`);
             
             if (response.data.message === 'Goal deleted successfully') {
                 setGoals(goals.filter(goal => goal._id !== goalId));
