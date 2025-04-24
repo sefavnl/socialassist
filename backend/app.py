@@ -16,7 +16,7 @@ load_dotenv()
 
 app = Flask(__name__, static_folder='../frontend/build', static_url_path='')
 CORS(app, resources={
-    r"/api/*": {
+    r"/*": {
         "origins": ["https://socialassist-frontend.onrender.com", "http://localhost:3000"],
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"],
