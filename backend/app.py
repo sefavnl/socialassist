@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import traceback
 import sys
 from bson.objectid import ObjectId
+from functools import wraps
 
 # Load environment variables
 load_dotenv()
@@ -39,6 +40,27 @@ except Exception as e:
 
 # JWT Secret Key
 app.config['SECRET_KEY'] = os.getenv('JWT_SECRET', 'your-secret-key-here')
+
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+        if 'Authorization' in request.headers:
+            token = request.headers['Authorization'].split(" ")[1]
+        
+        if not token:
+            return jsonify({'message': 'Token is missing!'}), 401
+            
+        try:
+            data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
+            current_user = users.find_one({'_id': ObjectId(data['user_id'])})
+            if not current_user:
+                return jsonify({'message': 'User not found!'}), 401
+        except:
+            return jsonify({'message': 'Token is invalid!'}), 401
+            
+        return f(current_user, *args, **kwargs)
+    return decorated
 
 # User Registration
 @app.route('/api/register', methods=['POST'])
@@ -83,27 +105,31 @@ def login():
         print(f"Giriş isteği alındı: {data}")
         
         user = users.find_one({'email': data['email']})
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+            
         print(f"Found user: {user}")
+        print("Checking password")
         
-        if user:
-            print(f"Checking password")
-            if bcrypt.checkpw(data['password'].encode('utf-8'), user['password']):
-                token = jwt.encode({
-                    'email': user['email'],
-                    'exp': datetime.utcnow() + timedelta(days=1)
-                }, app.config['SECRET_KEY'])
-                
-                return jsonify({
-                    'token': token,
-                    'user': {
-                        'email': user['email'],
-                        'name': user['name']
-                    }
-                })
-        
-        return jsonify({'error': 'Invalid credentials'}), 401
+        if bcrypt.checkpw(data['password'].encode('utf-8'), user['password']):
+            token = jwt.encode({
+                'user_id': str(user['_id']),
+                'exp': datetime.utcnow() + timedelta(days=1)
+            }, app.config['SECRET_KEY'])
+            
+            return jsonify({
+                'token': token,
+                'user': {
+                    'id': str(user['_id']),
+                    'name': user['name'],
+                    'email': user['email']
+                }
+            })
+        else:
+            return jsonify({'error': 'Invalid password'}), 401
+            
     except Exception as e:
-        print(f"Giriş hatası: {str(e)}")
+        print(f"Login error: {str(e)}")
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
@@ -188,63 +214,35 @@ def reset_password():
 
 # Add Daily Goal
 @app.route('/api/goals', methods=['POST'])
-def add_goal():
-    token = request.headers.get('Authorization')
-    if not token:
-        return jsonify({'error': 'Token is missing'}), 401
-    
+@token_required
+def add_goal(current_user):
     try:
-        # Remove 'Bearer ' prefix if present
-        if token.startswith('Bearer '):
-            token = token[7:]
-            
-        decoded = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
         data = request.get_json()
+        data['user_id'] = str(current_user['_id'])
+        data['created_at'] = datetime.now()
+        data['completed'] = False
         
-        goal = {
-            'email': decoded['email'],
-            'title': data['title'],
-            'description': data['description'],
-            'createdAt': datetime.utcnow().isoformat(),
-            'completed': False
-        }
-        
-        result = goals.insert_one(goal)
+        result = goals.insert_one(data)
         return jsonify({
             'message': 'Goal added successfully',
             'goalId': str(result.inserted_id)
-        })
-    
-    except jwt.ExpiredSignatureError:
-        return jsonify({'error': 'Token has expired'}), 401
-    except jwt.InvalidTokenError:
-        return jsonify({'error': 'Invalid token'}), 401
+        }), 201
     except Exception as e:
-        print(f"Goal add error: {str(e)}")
-        print(traceback.format_exc())
+        print(f"Hedef eklenirken hata: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 # Get User Goals
 @app.route('/api/goals', methods=['GET'])
-def get_goals():
-    token = request.headers.get('Authorization')
-    if not token:
-        return jsonify({'error': 'Token is missing'}), 401
-    
+@token_required
+def get_goals(current_user):
     try:
-        decoded = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
-        user_goals = list(goals.find({'email': decoded['email']}))
-        
-        # Convert ObjectId to string for JSON serialization
+        user_goals = list(goals.find({'user_id': str(current_user['_id'])}))
         for goal in user_goals:
             goal['_id'] = str(goal['_id'])
-        
         return jsonify(user_goals)
-    
-    except jwt.ExpiredSignatureError:
-        return jsonify({'error': 'Token has expired'}), 401
-    except jwt.InvalidTokenError:
-        return jsonify({'error': 'Invalid token'}), 401
+    except Exception as e:
+        print(f"Hedefler getirilirken hata: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 # Chatbot endpoint
 @app.route('/api/chatbot', methods=['POST'])
@@ -300,70 +298,38 @@ def chatbot():
 
 # Update Goal
 @app.route('/api/goals/<goal_id>', methods=['PUT'])
-def update_goal(goal_id):
-    token = request.headers.get('Authorization')
-    if not token:
-        return jsonify({'error': 'Token is missing'}), 401
-    
+@token_required
+def update_goal(current_user, goal_id):
     try:
-        # Remove 'Bearer ' prefix if present
-        if token.startswith('Bearer '):
-            token = token[7:]
-            
-        decoded = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
         data = request.get_json()
+        goal = goals.find_one({'_id': ObjectId(goal_id), 'user_id': str(current_user['_id'])})
         
-        # Update goal
-        result = goals.update_one(
-            {'_id': ObjectId(goal_id), 'email': decoded['email']},
+        if not goal:
+            return jsonify({'message': 'Goal not found!'}), 404
+            
+        goals.update_one(
+            {'_id': ObjectId(goal_id)},
             {'$set': data}
         )
-        
-        if result.modified_count == 0:
-            return jsonify({'error': 'Goal not found or unauthorized'}), 404
-            
         return jsonify({'message': 'Goal updated successfully'})
-    
-    except jwt.ExpiredSignatureError:
-        return jsonify({'error': 'Token has expired'}), 401
-    except jwt.InvalidTokenError:
-        return jsonify({'error': 'Invalid token'}), 401
     except Exception as e:
-        print(f"Goal update error: {str(e)}")
-        print(traceback.format_exc())
+        print(f"Hedef güncellenirken hata: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 # Delete Goal
 @app.route('/api/goals/<goal_id>', methods=['DELETE'])
-def delete_goal(goal_id):
-    token = request.headers.get('Authorization')
-    if not token:
-        return jsonify({'error': 'Token is missing'}), 401
-    
+@token_required
+def delete_goal(current_user, goal_id):
     try:
-        # Remove 'Bearer ' prefix if present
-        if token.startswith('Bearer '):
-            token = token[7:]
-            
-        decoded = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+        goal = goals.find_one({'_id': ObjectId(goal_id), 'user_id': str(current_user['_id'])})
         
-        # Delete goal
-        result = goals.delete_one(
-            {'_id': ObjectId(goal_id), 'email': decoded['email']}
-        )
-        
-        if result.deleted_count == 0:
-            return jsonify({'error': 'Goal not found or unauthorized'}), 404
+        if not goal:
+            return jsonify({'message': 'Goal not found!'}), 404
             
+        goals.delete_one({'_id': ObjectId(goal_id)})
         return jsonify({'message': 'Goal deleted successfully'})
-    
-    except jwt.ExpiredSignatureError:
-        return jsonify({'error': 'Token has expired'}), 401
-    except jwt.InvalidTokenError:
-        return jsonify({'error': 'Invalid token'}), 401
     except Exception as e:
-        print(f"Goal delete error: {str(e)}")
-        print(traceback.format_exc())
+        print(f"Hedef silinirken hata: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
