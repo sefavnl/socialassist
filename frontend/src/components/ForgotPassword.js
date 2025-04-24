@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import api from '../api/axios';
 import { useNavigate } from 'react-router-dom';
 import './ForgotPassword.css';
 
@@ -18,14 +18,17 @@ const ForgotPassword = () => {
         setSuccess('');
 
         try {
-            const response = await axios.post('http://localhost:5000/api/forgot-password', { email });
-            if (response.data.message) {
+            const response = await api.post('/api/forgot-password', {
+                email: email
+            });
+
+            if (response.status === 200) {
                 setSuccess('Şifre sıfırlama bağlantısı e-posta adresinize gönderildi');
                 setResetToken(response.data.reset_token);
                 setShowResetForm(true);
             }
         } catch (err) {
-            setError(err.response?.data?.error || 'Şifre sıfırlama isteği gönderilirken bir hata oluştu');
+            setError(err.response?.data?.error || 'Şifre sıfırlama işlemi sırasında bir hata oluştu');
         }
     };
 
@@ -35,7 +38,7 @@ const ForgotPassword = () => {
         setSuccess('');
 
         try {
-            const response = await axios.post('http://localhost:5000/api/reset-password', {
+            const response = await api.post('/api/reset-password', {
                 token: resetToken,
                 password: newPassword
             });
